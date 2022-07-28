@@ -1,6 +1,9 @@
 #!/bin/bash
 set -Eeuxo pipefail
 
+dirReport="./Archive"
+badWordsArray=()
+
 function createArchiveFolder {
     destination="./Archive"
     if [ ! -d "$destination" ]; then
@@ -49,7 +52,6 @@ function parseArguments {
                 ;;
         esac
     done
-    #make array of dirreport and badwords
     
     echo "$dirReport $badWords"
 }
@@ -83,47 +85,33 @@ function readBadWords {
         echo "ERROR: badwords file does not exist"
         exit 1
     fi
-
-    #return array of badwords
-    return "${badWordsArray[@]}"
-
-    echo "${badWordsArray[@]}"
 }
 
-function init {  
+function configureBB {  
     read -r dirReport badWords < <(parseArguments "$@")
-    exists=$(dirReportExists "$dirReport")
     
-    if [ ! "$dirReport" == "" ]; then
+    exists=$(dirReportExists "$dirReport")
+
+    # If dirReport is not set to "./Archive", create the folder
+    if [ ! "$dirReport" == "./Archive" ]; then
         if [ "$exists" == 0 ]; then
             echo "ERROR: '$dirReport' is not an existing directory"
+            exit 1
         fi
-    else
+    # If dirreport is set to "./Archive" or empty, set dirreport to default value
+    elif [ "$dirReport" == "./Archive" ] || [ "$dirReport" == "" ]; then
         dirReport=$(createArchiveFolder)
     fi
 
-    saveSettings dirReport badWords
+    readBadWords "$badWords"
 }
 
-#save the settings to a conf file	
-function saveSettings {
-    #save the settings to a conf  file
-    #check if settings file exists in home directory if not create it and write the settings to it. Else just write the settings to it.
-    if [ ! -f "$HOME/.config/configureBB.conf" ]; then
-        # Check if the .config directory exists, if not create it.
-        if [ ! -d "$HOME/.config" ]; then
-            mkdir -p "$HOME/.config"
-        fi
-        
-        # create the file
-        touch "$HOME/.config/configureBB.conf"
-    fi
-
-    tempBadWords=$(readBadWords "$badWords")
-    
-    # write the settings to the file
-    echo "dirReport=$dirReport" > "$HOME/.config/configureBB.conf"
-    echo "badWords=$tempBadWords" >> "$HOME/.config/configureBB.conf"
+function debugVars {
+    echo "dirReport: $dirReport"
+    echo "badWords:"
+    for word in "${badWordsArray[@]}"; do
+        echo "$word"
+    done
 }
 
-init "$@"
+# init "$@"

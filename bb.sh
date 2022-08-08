@@ -3,6 +3,46 @@ set -Eeuxo pipefail
 
 dirReport="./Archive"
 badWordsArray=()
+configured=false
+
+function log() {
+    # Check if we have a log file in the home directory
+    if [ -f "$HOME/log.txt" ]; then
+        echo "$(date +%Y-%m-%dT%H:%M:%S%z) $1" >> "$HOME/log.txt"
+    else
+        echo "$(date +%Y-%m-%dT%H:%M:%S%z) $1" > "$HOME/log.txt"
+    fi
+}
+
+function copyToArchive {
+    owner=$(stat -c '%U' "$1")
+
+    creationDate=$(stat -c '%w' "$1")
+    
+    date=$(echo "$creationDate" | cut -d ' ' -f 1)
+    
+    base=$(basename "$1")
+    extension="${base##*.}"
+    filename="${base%.*}"
+
+
+    if [ ! -f  "$dirReport/$owner-$date-$filename-$extension" ]; then
+        cp "$1" "$dirReport/$owner-$date-$filename-$extension"
+    else
+        count=1
+        while [ -f "$dirReport/$owner-$date-$filename$count-$extension" ]; do
+            count=$((count+1))
+        done
+        cp "$1" "$dirReport/$owner-$date-$filename$count-$extension"
+    fi
+}
+
+#todo 1 - check if the file is a text file ✔
+#todo 2 - runBB ✅✔️✅✔️
+#todo 3 - copy file to archive folder, rename with (user)-(creation date(year-month-day))-(original-file-name(count))-(extension)
+#todo 4 - error handling
+#todo 5 - check if configureBB is run correctly ✔
+
 
 function createArchiveFolder {
     destination="./Archive"
@@ -104,6 +144,8 @@ function configureBB {
     fi
 
     readBadWords "$badWords"
+
+    configured=true
 }
 
 function debugVars {
@@ -114,4 +156,36 @@ function debugVars {
     done
 }
 
+function runBB()
+{
+    if [ "$configured" == false ]; then
+        echo "ERROR: configureBB has not been run"
+        exit 1
+    fi
+
+    # Loop through all files in the current working directory
+    find . -type f -print0 | while IFS= read -r -d '' file; do
+        # if this is a file
+        # if [ -f "$file" ]; then
+            type=$(file -0 "$file")
+            # Check if the file is a text file by checking if type contains "text"
+            if [[ $type == *"text"* ]]; then
+                # Scan the file for bad words
+                for word in "${badWordsArray[@]}"; do
+                    if grep -q "$word" "$file"; then
+                        # If a bad word is found, copy the file to the archive folder
+                        copyToArchive "$file"
+                        break
+                    fi
+                done
+            fi
+        # else
+        #     # If this is a directory, recursively call runBB on the directory
+        #     runBB "$file"
+        # fi
+    done   
+}
+
 # init "$@"
+# stat -c '%w' file
+

@@ -8,9 +8,9 @@ configured=false
 function log() {
     # Check if we have a log file in the home directory
     if [ -f "$HOME/log.txt" ]; then
-        echo "$(date +%Y-%m-%dT%H:%M:%S%z) $1" >> "$HOME/log.txt"
+        echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] $1" >> "$HOME/log.txt"
     else
-        echo "$(date +%Y-%m-%dT%H:%M:%S%z) $1" > "$HOME/log.txt"
+        echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] $1" > "$HOME/log.txt"
     fi
 }
 
@@ -18,6 +18,14 @@ function copyToArchive {
     owner=$(stat -c '%U' "$1")
 
     creationDate=$(stat -c '%w' "$1")
+
+    # If creation date is not set or is "-" log error
+    if [ -z "$creationDate" ] || [ "$creationDate" == "-" ]; then
+        log "Error: Creation date is not set for $1, the current filesystem may not support this feature."
+        echo "There was a non critical error during execution of the script. Please check the log file for more information."
+
+        creationDate=""
+    fi
     
     date=$(echo "$creationDate" | cut -d ' ' -f 1)
     
@@ -26,20 +34,20 @@ function copyToArchive {
     filename="${base%.*}"
 
 
-    if [ ! -f  "$dirReport/$owner-$date-$filename-$extension" ]; then
-        cp "$1" "$dirReport/$owner-$date-$filename-$extension"
+    if [ ! -f  "$dirReport/$owner-$date-$filename.$extension" ]; then
+        cp "$1" "$dirReport/$owner-$date-$filename.$extension"
     else
         count=1
-        while [ -f "$dirReport/$owner-$date-$filename$count-$extension" ]; do
+        while [ -f "$dirReport/$owner-$date-$filename$count.$extension" ]; do
             count=$((count+1))
         done
-        cp "$1" "$dirReport/$owner-$date-$filename$count-$extension"
+        cp "$1" "$dirReport/$owner-$date-$filename$count.$extension"
     fi
 }
 
 #todo 1 - check if the file is a text file ✔
 #todo 2 - runBB ✅✔️✅✔️
-#todo 3 - copy file to archive folder, rename with (user)-(creation date(year-month-day))-(original-file-name(count))-(extension)
+#todo 3 - copy file to archive folder, rename with (user)-(creation date(year-month-day))-(original-file-name(count)).(extension) ✔
 #todo 4 - error handling
 #todo 5 - check if configureBB is run correctly ✔
 
@@ -165,8 +173,12 @@ function runBB()
 
     # Loop through all files in the current working directory
     find . -type f -print0 | while IFS= read -r -d '' file; do
-        # if this is a file
-        # if [ -f "$file" ]; then
+        if [[ "$file" == *$dirReport* ]]; then
+            continue
+        fi
+
+        # If the file size is 0, skip it
+        if [ -s "$file" ]; then
             type=$(file -0 "$file")
             # Check if the file is a text file by checking if type contains "text"
             if [[ $type == *"text"* ]]; then
@@ -179,10 +191,7 @@ function runBB()
                     fi
                 done
             fi
-        # else
-        #     # If this is a directory, recursively call runBB on the directory
-        #     runBB "$file"
-        # fi
+        fi
     done   
 }
 

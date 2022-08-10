@@ -2,7 +2,8 @@
 # set -Eeuxo pipefail
 
 dirReport="./Archive"
-badWordsArray=()
+badWords=""
+badWordsArray=("bad")
 configured=false
 
 function log() {
@@ -102,8 +103,6 @@ function parseArguments {
                 ;;
         esac
     done
-    
-    echo "$dirReport $badWords"
 }
 
 function dirReportExists {
@@ -126,9 +125,6 @@ function readBadWords {
             while read -r line; do
                 badWordsArray+=("$line")
             done < "$1"
-        else
-            #if bardwords file is empty, set default badwords
-            badWordsArray=("bad")
         fi
     else
         # if badwords file does not exist, print error message and exit
@@ -146,7 +142,7 @@ function configureBB {
 		bash
 	fi
 
-    read -r dirReport badWords < <(parseArguments "$@")
+	parseArguments "$@"
     
     exists=$(dirReportExists "$dirReport")
 

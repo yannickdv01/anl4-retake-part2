@@ -117,32 +117,32 @@ function dirReportExists {
 
 #function to read badwords file and create array of badwords
 function readBadWords {
-    #check if badwords file exists
-    if [ -f "$1" ]; then
-        #if badwords file exists, check if badwords file is empty
-        if [ -s "$1" ]; then
-            #if badwords file is not empty, read badwords file and create array of badwords
-            while read -r line; do
-                badWordsArray+=("$line")
-            done < "$1"
-        fi
-    else
-        # if badwords file does not exist, print error message and exit
-        echo "ERROR: badwords file does not exist"
-		log "ERROR: badwords file does not exist"
-        bash
-    fi
+	# Check if $1 is not empty
+	if [ -n "$1" ]; then
+		#check if badwords file exists
+		if [ -f "$1" ]; then
+			#if badwords file exists, check if badwords file is empty
+			if [ -s "$1" ]; then
+				badWordsArray=()
+				#if badwords file is not empty, read badwords file and create array of badwords
+				while read -r line; do
+					badWordsArray+=("$line")
+				done < "$1"
+			fi
+		else
+			# if badwords file does not exist, print error message and exit
+			echo "ERROR: badwords file does not exist"
+			log "ERROR: badwords file does not exist"
+			bash
+		fi
+	fi
 }
 
 function configureBB {  
-	# Check if there are any arguments
-	if [ $# -eq 0 ]; then
-		echo "ERROR: No arguments supplied"
-		log "ERROR: No arguments supplied"
-		bash
+	# If there are any arguments, parse them
+	if [ $# -gt 0 ]; then
+		parseArguments "$@"
 	fi
-
-	parseArguments "$@"
     
     exists=$(dirReportExists "$dirReport")
 

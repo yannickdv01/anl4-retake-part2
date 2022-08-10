@@ -1,5 +1,5 @@
 #!/bin/bash
-set -Eeuxo pipefail
+# set -Eeuxo pipefail
 
 dirReport="./Archive"
 badWordsArray=()
@@ -92,11 +92,13 @@ function parseArguments {
             \?)
                 #print to stderr
                 echo "ERROR: -$OPTARG is not a valid option"
-                exit 1
+                log "ERROR: -$OPTARG is not a valid option"
+				bash
                 ;;
             :)
                 echo "ERROR: -$OPTARG requires an argument"
-                exit 1
+				log "ERROR: -$OPTARG requires an argument"
+                bash
                 ;;
         esac
     done
@@ -131,11 +133,19 @@ function readBadWords {
     else
         # if badwords file does not exist, print error message and exit
         echo "ERROR: badwords file does not exist"
-        exit 1
+		log "ERROR: badwords file does not exist"
+        bash
     fi
 }
 
 function configureBB {  
+	# Check if there are any arguments
+	if [ $# -eq 0 ]; then
+		echo "ERROR: No arguments supplied"
+		log "ERROR: No arguments supplied"
+		bash
+	fi
+
     read -r dirReport badWords < <(parseArguments "$@")
     
     exists=$(dirReportExists "$dirReport")
@@ -144,7 +154,8 @@ function configureBB {
     if [ ! "$dirReport" == "./Archive" ]; then
         if [ "$exists" == 0 ]; then
             echo "ERROR: '$dirReport' is not an existing directory"
-            exit 1
+			log "ERROR: '$dirReport' is not an existing directory"
+            bash
         fi
     # If dirreport is set to "./Archive" or empty, set dirreport to default value
     elif [ "$dirReport" == "./Archive" ] || [ "$dirReport" == "" ]; then
@@ -168,7 +179,8 @@ function runBB()
 {
     if [ "$configured" == false ]; then
         echo "ERROR: configureBB has not been run"
-        exit 1
+		log "ERROR: configureBB has not been run"
+        bash
     fi
 
     # Loop through all files in the current working directory

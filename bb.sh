@@ -6,13 +6,22 @@ badWords=""
 badWordsArray=("bad")
 configured=false
 
+cancelExecution=0
+
 function log() {
+    echo "There was an error in the execution, for more details check log.txt in the home directory." >&2
+
     # Check if we have a log file in the home directory
     if [ -f "$HOME/log.txt" ]; then
         echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] $1" >> "$HOME/log.txt"
     else
         echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] $1" > "$HOME/log.txt"
     fi
+}
+
+function print()
+{
+    echo "$1" >&2
 }
 
 function copyToArchive {
@@ -23,8 +32,6 @@ function copyToArchive {
     # If creation date is not set or is "-" log error
     if [ -z "$creationDate" ] || [ "$creationDate" == "-" ]; then
         log "Error: Creation date is not set for $1, the current filesystem may not support this feature."
-        echo "There was a non critical error during execution of the script. Please check the log file for more information."
-
         creationDate=""
     fi
     
@@ -46,21 +53,13 @@ function copyToArchive {
     fi
 }
 
-#todo 1 - check if the file is a text file ✔
-#todo 2 - runBB ✅✔️✅✔️
-#todo 3 - copy file to archive folder, rename with (user)-(creation date(year-month-day))-(original-file-name(count)).(extension) ✔
-#todo 4 - error handling
-#todo 5 - check if configureBB is run correctly ✔
-
-
 function createArchiveFolder {
     destination="./Archive"
     if [ ! -d "$destination" ]; then
         mkdir -p "$destination"
 
         # Save the absolute path of the folder
-        destination=$(cd "$destination" && pwd)
-        cd ..
+        destination=$(readlink -f $destination)
     else
         count=1
         newDestination="$destination"
@@ -69,36 +68,36 @@ function createArchiveFolder {
             count=$((count+1))
         done
 
-        destination=$newDestination
-
-        mkdir -p "$destination"
+        mkdir -p "$newDestination"
 
         # Save the absolute path of the folder
-        destination=$(cd "$destination" && pwd)
-        cd ..
+        destination=$(readlink -f $newDestination)
     fi
 
     echo "$destination"
 }
 
 function parseArguments {
-    while getopts "d:b:" opt; do
-        case $opt in
+    badWords=""
+
+    while getopts ":d:b:" opt; do
+        case "${opt}" in
             d)
                 dirReport="$OPTARG"
                 ;;
             b)
                 badWords="$OPTARG"
                 ;;
-            \?)
-                #print to stderr
-                echo "ERROR: -$OPTARG is not a valid option"
-                log "ERROR: -$OPTARG is not a valid option"
-				bash
-                ;;
             :)
-                echo "ERROR: -$OPTARG requires an argument"
-				log "ERROR: -$OPTARG requires an argument"
+                #cancelExecution=1
+                #print "Requires option"
+                log "ERROR: At least 1 valid argument has to be supplied" >&2
+                bash
+                ;;
+            \?)
+                #cancelExecution=1
+                #print "Invalid option"
+                log "ERROR: -$OPTARG is not a valid option" >&2
                 bash
                 ;;
         esac
@@ -153,14 +152,13 @@ function configureBB {
 			log "ERROR: '$dirReport' is not an existing directory"
             bash
         fi
-    # If dirreport is set to "./Archive" or empty, set dirreport to default value
-    elif [ "$dirReport" == "./Archive" ] || [ "$dirReport" == "" ]; then
-        dirReport=$(createArchiveFolder)
+
+        if [ $cancelExecution -eq 0 ]; then
+            readBadWords "$badWords"
+
+            configured=1
+        fi
     fi
-
-    readBadWords "$badWords"
-
-    configured=true
 }
 
 function debugVars {
@@ -185,22 +183,34 @@ function runBB()
             continue
         fi
 
-        # If the file size is 0, skip it
-        if [ -s "$file" ]; then
-            type=$(file -0 "$file")
-            # Check if the file is a text file by checking if type contains "text"
-            if [[ $type == *"text"* ]]; then
-                # Scan the file for bad words
-                for word in "${badWordsArray[@]}"; do
-                    if grep -q "$word" "$file"; then
-                        # If a bad word is found, copy the file to the archive folder
-                        copyToArchive "$file"
-                        break
-                    fi
-                done
+        # Loop through all files in the current working directory
+        find . -type f -print0 | while IFS= read -r -d '' file; do
+            if [[ "$file" == *$dirReport* ]]; then
+                continue
             fi
-        fi
-    done   
+
+            # If the file size is 0, skip it
+            if [ -s "$file" ]; then
+                type=$(file -0 "$file")
+                # Check if the file is a text file by checking if type contains "text"
+                if [[ $type == *"text"* ]]; then
+                    # Scan the file for bad words
+                    for word in "${badWordsArray[@]}"; do
+                        if grep -q "$word" "$file"; then
+                            # If a bad word is found, copy the file to the archive folder
+                            copyToArchive "$file"
+                            break
+                        fi
+                    done
+                fi
+            fi
+        done
+    #else if there are arguments, run the program with the arguments
+    else
+        log "ERROR: no arguments can be supplied to runBB"
+        bash
+    fi
+       
 }
 
 # init "$@"

@@ -1,29 +1,18 @@
 #!/bin/bash
-set -Eeuxo pipefail
+# set -Eeuxo pipefail
 
-dirReport=""
-
+dirReport="./Archive"
 badWords=""
 badWordsArray=("bad")
-
-configured=0
-
-#cancelExecution=0
+configured=false
 
 function log() {
-    echo "There was an error in the execution, for more details check log.txt in the home directory." >&2
-
     # Check if we have a log file in the home directory
     if [ -f "$HOME/log.txt" ]; then
         echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] $1" >> "$HOME/log.txt"
     else
         echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] $1" > "$HOME/log.txt"
     fi
-}
-
-function print()
-{
-    echo "$1" >&2
 }
 
 function copyToArchive {
@@ -34,6 +23,8 @@ function copyToArchive {
     # If creation date is not set or is "-" log error
     if [ -z "$creationDate" ] || [ "$creationDate" == "-" ]; then
         log "Error: Creation date is not set for $1, the current filesystem may not support this feature."
+        echo "There was a non critical error during execution of the script. Please check the log file for more information."
+
         creationDate=""
     fi
     
@@ -55,13 +46,21 @@ function copyToArchive {
     fi
 }
 
+#todo 1 - check if the file is a text file ✔
+#todo 2 - runBB ✅✔️✅✔️
+#todo 3 - copy file to archive folder, rename with (user)-(creation date(year-month-day))-(original-file-name(count)).(extension) ✔
+#todo 4 - error handling
+#todo 5 - check if configureBB is run correctly ✔
+
+
 function createArchiveFolder {
     destination="./Archive"
     if [ ! -d "$destination" ]; then
         mkdir -p "$destination"
 
         # Save the absolute path of the folder
-        destination=$(readlink -f $destination)
+        destination=$(cd "$destination" && pwd)
+        cd ..
     else
         count=1
         newDestination="$destination"
@@ -70,36 +69,36 @@ function createArchiveFolder {
             count=$((count+1))
         done
 
-        mkdir -p "$newDestination"
+        destination=$newDestination
+
+        mkdir -p "$destination"
 
         # Save the absolute path of the folder
-        destination=$(readlink -f $newDestination)
+        destination=$(cd "$destination" && pwd)
+        cd ..
     fi
 
     echo "$destination"
 }
 
 function parseArguments {
-    while getopts ":d:b:" opt; do
-        case "${opt}" in
+    while getopts "d:b:" opt; do
+        case $opt in
             d)
-                echo "Option $opt: $OPTARG"
                 dirReport="$OPTARG"
                 ;;
             b)
-                echo "Option $opt: $OPTARG"
                 badWords="$OPTARG"
                 ;;
             \?)
-                #cancelExecution=1
-                #print "Requires option"
-                log "ERROR: At least 1 valid argument has to be supplied" >&2
-                bash
+                #print to stderr
+                echo "ERROR: -$OPTARG is not a valid option"
+                log "ERROR: -$OPTARG is not a valid option"
+				bash
                 ;;
             :)
-                #cancelExecution=1
-                #print "Invalid option"
-                log "ERROR: -$OPTARG is not a valid option" >&2
+                echo "ERROR: -$OPTARG requires an argument"
+				log "ERROR: -$OPTARG requires an argument"
                 bash
                 ;;
         esac
@@ -132,6 +131,7 @@ function readBadWords {
 			fi
 		else
 			# if badwords file does not exist, print error message and exit
+			echo "ERROR: badwords file does not exist"
 			log "ERROR: badwords file does not exist"
 			bash
 		fi
@@ -139,30 +139,28 @@ function readBadWords {
 }
 
 function configureBB {  
-    dirReport=""
-    badWords=""
-    badWordsArray=("bad")
-    configured=0
-
 	# If there are any arguments, parse them
 	if [ $# -gt 0 ]; then
 		parseArguments "$@"
 	fi
     
-    echo "DirReport:  $dirReport"
-
     exists=$(dirReportExists "$dirReport")
 
-    # If dirReport is empty, create it else check if it is a directory
-    if [ "$dirReport" == "" ]; then
+    # If dirReport is not set to "./Archive", create the folder
+    if [ ! "$dirReport" == "./Archive" ]; then
+        if [ "$exists" == 0 ]; then
+            echo "ERROR: '$dirReport' is not an existing directory"
+			log "ERROR: '$dirReport' is not an existing directory"
+            bash
+        fi
+    # If dirreport is set to "./Archive" or empty, set dirreport to default value
+    elif [ "$dirReport" == "./Archive" ] || [ "$dirReport" == "" ]; then
         dirReport=$(createArchiveFolder)
-    elif [ "$exists" == 0 ]; then
-        log "ERROR: '$dirReport' is not an existing directory"
-        bash
     fi
 
     readBadWords "$badWords"
-    configured=1
+
+    configured=true
 }
 
 function debugVars {
@@ -175,8 +173,8 @@ function debugVars {
 
 function runBB()
 {
-    if [ $configured -eq 0 ]; then
-        echo "ERROR: configureBB has not been run" >&2
+    if [ "$configured" == false ]; then
+        echo "ERROR: configureBB has not been run"
 		log "ERROR: configureBB has not been run"
         bash
     fi

@@ -1,5 +1,5 @@
 #!/bin/bash
-set -Eeuxo pipefail
+#set -Eeuxo pipefail
 
 dirReport=""
 
@@ -13,11 +13,26 @@ configured=0
 function log() {
     echo "There was an error in the execution, for more details check log.txt in the home directory." >&2
 
+    logStr="[$(date +%Y-%m-%dT%H:%M:%S%z)] $1"
+    dest="$HOME/log.txt"
+
     # Check if we have a log file in the home directory
-    if [ -f "$HOME/log.txt" ]; then
-        echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] $1" >> "$HOME/log.txt"
+    if [ -f "$dest" ]; then
+        echo "$logStr" >> "$dest"
     else
-        echo "[$(date +%Y-%m-%dT%H:%M:%S%z)] $1" > "$HOME/log.txt"
+        echo "$logStr" > "$dest"
+    fi
+}
+
+function report() {
+    reportStr="$1, $2, $dirReport, $3"
+    dest="$dirReport/report.csv"
+
+    if [ -f "$dest" ]; then
+        echo "$reportStr" >> "$dest"
+    else
+        echo "Source, New name, Destination, Word" > "$dest"
+        echo "$reportStr" >> "$dest"
     fi
 }
 
@@ -27,31 +42,37 @@ function print()
 }
 
 function copyToArchive {
-    owner=$(stat -c '%U' "$1")
+    file="$1"
+    word="$2"
 
-    creationDate=$(stat -c '%w' "$1")
+    owner=$(stat -c '%U' "$file")
+
+    creationDate=$(stat -c '%w' "$file")
 
     # If creation date is not set or is "-" log error
     if [ -z "$creationDate" ] || [ "$creationDate" == "-" ]; then
-        log "Error: Creation date is not set for $1, the current filesystem may not support this feature."
+        log "Error: Creation date is not set for $file, the current filesystem may not support this feature."
         creationDate=""
     fi
     
     date=$(echo "$creationDate" | cut -d ' ' -f 1)
     
-    base=$(basename "$1")
+    base=$(basename "$file")
     extension="${base##*.}"
     filename="${base%.*}"
 
-
     if [ ! -f  "$dirReport/$owner-$date-$filename.$extension" ]; then
-        cp "$1" "$dirReport/$owner-$date-$filename.$extension"
+        cp "$file" "$dirReport/$owner-$date-$filename.$extension"
+        
+        report "$file" "$owner-$date-$filename.$extension" "$word"
     else
         count=1
         while [ -f "$dirReport/$owner-$date-$filename$count.$extension" ]; do
             count=$((count+1))
         done
-        cp "$1" "$dirReport/$owner-$date-$filename$count.$extension"
+        cp "$file" "$dirReport/$owner-$date-$filename$count.$extension"
+
+        report "$file" "$owner-$date-$filename.$extension" "$word"
     fi
 }
 
@@ -73,7 +94,7 @@ function createArchiveFolder {
         mkdir -p "$newDestination"
 
         # Save the absolute path of the folder
-        destination=$(readlink -f $newDestination)
+        destination=$(readlink -f "$newDestination")
     fi
 
     echo "$destination"
@@ -86,23 +107,23 @@ function parseArguments {
     while getopts ":d:b:" opt; do
         case "${opt}" in
             d)
-                echo "Option $opt: $OPTARG"
+                #echo "Option $opt: $OPTARG"
                 dirReport="$OPTARG"
                 ;;
             b)
-                echo "Option $opt: $OPTARG"
+                #echo "Option $opt: $OPTARG"
                 badWords="$OPTARG"
-                ;;
-            \?)
-                #cancelExecution=1
-                #print "Requires option"
-                log "ERROR: At least 1 valid argument has to be supplied" >&2
-                bash
                 ;;
             :)
                 #cancelExecution=1
                 #print "Invalid option"
-                log "ERROR: -$OPTARG is not a valid option" >&2
+                print "ERROR: At least 1 valid argument has to be supplied" >&2
+                bash
+                ;;
+            \?)
+                #cancelExecution=1
+                #print "Requires option"
+                print "ERROR: -$OPTARG is not a valid option" >&2
                 bash
                 ;;
         esac
@@ -184,6 +205,7 @@ function runBB()
 
     # Loop through all files in the current working directory
     find . -type f -print0 | while IFS= read -r -d '' file; do
+        # Ignore files in the archive folder
         if [[ "$file" == *$dirReport* ]]; then
             continue
         fi
@@ -197,15 +219,12 @@ function runBB()
                 for word in "${badWordsArray[@]}"; do
                     if grep -q "$word" "$file"; then
                         # If a bad word is found, copy the file to the archive folder
-                        copyToArchive "$file"
+                        copyToArchive "$file" "$word"
                         break
                     fi
                 done
             fi
         fi
-    done   
+    done  
+    configured=0 
 }
-
-# init "$@"
-# stat -c '%w' file
-

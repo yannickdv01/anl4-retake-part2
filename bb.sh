@@ -80,6 +80,9 @@ function createArchiveFolder {
 }
 
 function parseArguments {
+	# Reset the getopts internal state
+	OPTIND=1
+	
     while getopts ":d:b:" opt; do
         case "${opt}" in
             d)
@@ -148,8 +151,6 @@ function configureBB {
 	if [ $# -gt 0 ]; then
 		parseArguments "$@"
 	fi
-    
-    echo "DirReport:  $dirReport"
 
     exists=$(dirReportExists "$dirReport")
 

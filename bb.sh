@@ -2,16 +2,19 @@
 #set -Eeuxo pipefail
 
 dirReport=""
+prevDirReports=()
 
 badWords=""
 badWordsArray=("bad")
 
 configured=0
 
+errorInRun=0
+
 #cancelExecution=0
 
 function log() {
-    echo "There was an error in the execution, for more details check log.txt in the home directory." >&2
+	errorInRun=1
 
     logStr="[$(date +%Y-%m-%dT%H:%M:%S%z)] $1"
     dest="$HOME/log.txt"
@@ -101,18 +104,50 @@ function createArchiveFolder {
 }
 
 function parseArguments {
+	args=("$@")
+
+	# Loop through all arguments
+	wasPrevValid=0
+	for arg in "${args[@]}"; do
+		# Check if the argument starts with a "-" or if the previous argument was valid
+		if [ "${arg:0:1}" == "-" ] || [ "$wasPrevValid" -eq 1 ]; then
+			wasPrevValid=1
+
+			if [ "${arg:0:1}" != "-" ]; then
+				wasPrevValid=0
+			fi
+		else
+			echo "ERROR: $arg is not a valid argument" >&2
+			bash
+		fi
+	done
+	
 	# Reset the getopts internal state
 	OPTIND=1
-	
+
     while getopts ":d:b:" opt; do
         case "${opt}" in
             d)
-                #echo "Option $opt: $OPTARG"
-                dirReport="$OPTARG"
+                echo "Option $opt: $OPTARG"
+                #check if dirreport is empty
+                if [ -z "$dirReport" ]; then
+                    dirReport="$OPTARG"
+                else
+                    print "Error: cant set dirreport twice"
+                    log "Error: dirreport is already set to $dirReport"
+                    bash
+                fi
                 ;;
             b)
-                #echo "Option $opt: $OPTARG"
-                badWords="$OPTARG"
+                echo "Option $opt: $OPTARG"
+                #check if badwords is empty
+                if [ -z "$badWords" ]; then
+                    badWords="$OPTARG"
+                else
+                    print "Error: cant set badwords twice"
+                    log "Error: badwords is already set to $badWords"
+                    bash
+                fi
                 ;;
             :)
                 #cancelExecution=1
@@ -142,24 +177,24 @@ function dirReportExists {
 
 #function to read badwords file and create array of badwords
 function readBadWords {
-	# Check if $1 is not empty
-	if [ -n "$1" ]; then
-		#check if badwords file exists
-		if [ -f "$1" ]; then
-			#if badwords file exists, check if badwords file is empty
-			if [ -s "$1" ]; then
-				badWordsArray=()
-				#if badwords file is not empty, read badwords file and create array of badwords
-				while read -r line; do
-					badWordsArray+=("$line")
-				done < "$1"
-			fi
-		else
-			# if badwords file does not exist, print error message and exit
-			log "ERROR: badwords file does not exist"
-			bash
-		fi
-	fi
+    if [ -n "$1" ]; then
+        #check if badwords file exists
+        if [ -f "$1" ]; then
+            #if badwords file exists, check if badwords file is empty
+            if [ -s "$1" ]; then
+                badWordsArray=()
+                #if badwords file is not empty, read badwords file and create array of badwords
+                while read -r line; do
+                    badWordsArray+=("$line")
+                done < "$1"
+            fi
+        else
+            # if badwords file does not exist, print error message and exit
+            print "ERROR: Badwords file does not exist" >&2
+            log "ERROR: badwords file does not exist"
+            bash
+        fi
+    fi
 }
 
 function configureBB {  
@@ -167,6 +202,7 @@ function configureBB {
     badWords=""
     badWordsArray=("bad")
     configured=0
+    currentWD=$(pwd)
 
 	# If there are any arguments, parse them
 	if [ $# -gt 0 ]; then
@@ -179,6 +215,7 @@ function configureBB {
     if [ "$dirReport" == "" ]; then
         dirReport=$(createArchiveFolder)
     elif [ "$exists" == 0 ]; then
+        print "ERROR: '$dirReport' is not an existing directory" >&2
         log "ERROR: '$dirReport' is not an existing directory"
         bash
     fi
@@ -188,20 +225,23 @@ function configureBB {
 }
 
 function debugVars {
+	echo "configured: $configured"
     echo "dirReport: $dirReport"
     echo "badWords:"
     for word in "${badWordsArray[@]}"; do
         echo "$word"
     done
+
+	echo "prevDirReports:"
+	for prevDirReport in "${prevDirReports[@]}"; do
+		echo "$prevDirReport"
+	done
 }
 
-function runBB()
+function realRunBB()
 {
-    if [ $configured -eq 0 ]; then
-        echo "ERROR: configureBB has not been run" >&2
-		log "ERROR: configureBB has not been run"
-        bash
-    fi
+	# Add the dirReport to prevDirReports
+	prevDirReports+=("$dirReport")
 
     # Loop through all files in the current working directory
     find . -type f -print0 | while IFS= read -r -d '' file; do
@@ -209,6 +249,18 @@ function runBB()
         if [[ "$file" == *$dirReport* ]]; then
             continue
         fi
+
+		inPrev=0
+		# Ignore the file if it is in any of the prevDirReports folders
+		for prevDirReport in "${prevDirReports[@]}"; do
+			if [[ "$file" == *$prevDirReport* ]]; then
+				inPrev=1
+				break
+			fi
+		done
+		if [ $inPrev -eq 1 ]; then
+			continue
+		fi
 
         # If the file size is 0, skip it
         if [ -s "$file" ]; then
@@ -227,4 +279,42 @@ function runBB()
         fi
     done  
     configured=0 
+
+	if [ $errorInRun -eq 1 ] ; then
+		echo "There was an error in the execution, for more details check log.txt in the home directory." >&2
+	fi
+}
+
+function runBB()
+{
+	errorInRun=0
+
+	passChecks=1
+    #check is currentWD matches the current working directory
+    if [ "$currentWD" != "$(pwd)" ]; then
+        print "ERROR: current working directory does not match the working directory of configureBB" >&2
+        log "ERROR: current working directory does not match the working directory of configureBB"
+
+        passChecks=0
+    fi
+    #check if there are any arguments
+    if [ $# -gt 0 ]; then
+        #give error message if there are any arguments
+        print "ERROR: No arguments are allowed" >&2
+        log "ERROR: No arguments are allowed"
+		
+		passChecks=0
+    fi
+	if [ $configured -eq 0 ]; then
+        #configureBB must be run after every runBB for safety reasons (in case of someone spamming runBB and clunking up space)
+        echo "ERROR: configureBB has not been run, please configure first. Or in case runBB is done, reconfigure." >&2
+		log "ERROR: configureBB has not been run"
+
+		passChecks=0
+    fi
+
+	if [ $passChecks -eq 1 ]; then
+		realRunBB > /dev/null 2>&1 &
+		#realRunBB
+	fi
 }

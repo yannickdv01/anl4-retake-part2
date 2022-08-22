@@ -1,9 +1,6 @@
 #!/bin/bash
 #set -Eeuxo pipefail
 
-#Yannick de Vreede, 1009289
-#Dimitri Etienne, 1007284
-
 dirReport=""
 prevDirReports=()
 

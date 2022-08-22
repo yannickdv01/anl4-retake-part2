@@ -1,5 +1,0 @@
-Source, New name, Destination, Word
-./badwords.txt, yannick01--badwords.txt, ./Test, hoi
-./examplewithbardwords.txt, yannick01--examplewithbardwords.txt, ./Test, piet
-./hoi.c, yannick01--hoi.c, ./Test, abadi
-./report.csv, yannick01--report.csv, ./Test, hoi
